@@ -28,18 +28,17 @@ class EvaluationResponse:
 
 def load_rejection_system(kp: float, ki: float) -> ct.TransferFunction | None:
     """Return a transfer function whose unit step is net torque after the load hits."""
-    if ki <= 0.0:
-        return None
-    pi = ct.tf([kp, ki], [1.0, 0.0])
-    # Net shaft torque = motor torque - load torque. In unity feedback the
-    # output disturbance passes through the sensitivity 1 / (1 + MOTOR * pi).
-    sensitivity = ct.feedback(1.0, MOTOR * pi)
-    if np.any(sensitivity.poles().real >= 0.0):
+    # Characteristic polynomial is tau*s^2 + (1 + kp)*s + ki; Routh-Hurwitz requires
+    # both (1 + kp) > 0 and ki > 0 (with tau > 0) for stability and zero steady-state error.
+    if ki <= 0.0 or 1.0 + kp <= 0.0:
         return None
 
-    load_torque_nm = LOAD_FORCE_N * LEVER_ARM_M
-    # Unit step response starts at SETPOINT_NM - load_torque_nm and settles to SETPOINT_NM.
-    return SETPOINT_NM - load_torque_nm * sensitivity
+    tau = MOTOR_TIME_CONSTANT_S
+    r = SETPOINT_NM
+    d = LOAD_FORCE_N * LEVER_ARM_M
+    # Closed form of r - d * S(s), where S(s) = 1 / (1 + MOTOR * pi):
+    #   ((r - d)*tau*s^2 + (r*(1 + kp) - d)*s + r*ki) / (tau*s^2 + (1 + kp)*s + ki)
+    return ct.tf([(r - d) * tau, r * (1.0 + kp) - d, r * ki], [tau, 1.0 + kp, ki])
 
 
 def step_metrics(system: ct.TransferFunction) -> tuple[float, float]:

@@ -27,10 +27,14 @@ def search(
     seed: int = 1,
     gamma: float = 1.0,
     alpha: float = 0.18,
+    tolerance: float = 1e-6,
+    patience: int | None = None,
 ) -> tuple[list[Firefly], list[Firefly]]:
     """Return the final swarm and the best firefly seen through each generation.
 
     Alpha sets the initial random step width in normalized coordinates.
+    When patience is set, stop early after that many consecutive generations
+    without a brightness improvement larger than tolerance.
     """
     rng = np.random.default_rng(seed)
     span = upper - lower
@@ -43,8 +47,10 @@ def search(
     ]
     swarm.sort(key=lambda fly: fly.brightness, reverse=True)
     history = [swarm[0]]
+    stagnant = 0
 
     for _ in range(generations):
+        prev_best = history[-1].brightness
         for i in range(population):
             fly = swarm[i]
             for j in range(i):
@@ -63,6 +69,16 @@ def search(
         swarm.sort(key=lambda fly: fly.brightness, reverse=True)
         history.append(swarm[0])
         alpha *= 0.93
+
+        if patience is not None:
+            best = swarm[0].brightness
+            improved = any(
+                np.isfinite(cur) and (not np.isfinite(prev) or cur - prev > tolerance)
+                for cur, prev in zip(best, prev_best)
+            )
+            stagnant = 0 if improved else stagnant + 1
+            if stagnant >= patience:
+                break
 
     def with_gains(fly: Firefly) -> Firefly:
         return Firefly(lower + span * fly.position, fly.brightness)

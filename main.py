@@ -18,11 +18,13 @@ from motor import (
 
 
 LOWER = np.array([0.0, 0.1])
-UPPER = np.array([120.0, 120.0])
+UPPER = np.array([50.0, 50.0])
 population = 30
 generations = 100
 gamma = 1.0
-alpha = 0.01
+alpha = 0.005
+patience = 15
+tolerance = 1e-6
 seed = 1
 
 
@@ -93,7 +95,8 @@ def main() -> None:
 
     swarm, history = search(
         objective, LOWER, UPPER,
-        population=population, generations=generations, gamma=gamma, alpha=args.alpha, seed=seed,
+        population=population, generations=generations, gamma=gamma, alpha=args.alpha,
+        tolerance=tolerance, patience=patience, seed=seed,
     )
     best = history[-1]
     if not np.isfinite(best.brightness[0]):

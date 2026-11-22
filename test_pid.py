@@ -9,6 +9,7 @@ from firefly import search
 from motor import (
     LEVER_ARM_M,
     LOAD_FORCE_N,
+    MOTOR,
     SETPOINT_NM,
     evaluation_response,
     load_rejection_system,
@@ -18,6 +19,20 @@ from motor import (
 
 
 class PITest(unittest.TestCase):
+    def test_closed_form_load_system_matches_feedback_sensitivity(self) -> None:
+        kp, ki = 5.0, 10.0
+        load_sys = load_rejection_system(kp, ki)
+        assert load_sys is not None
+        pi = ct.tf([kp, ki], [1.0, 0.0])
+        expected = SETPOINT_NM - (LOAD_FORCE_N * LEVER_ARM_M) * ct.feedback(1.0, MOTOR * pi)
+        t = np.linspace(0.0, 4.0, 200)
+        np.testing.assert_allclose(
+            ct.step_response(load_sys, t).outputs,
+            ct.step_response(expected, t).outputs,
+            rtol=1e-6,
+            atol=1e-6,
+        )
+
     def test_opposing_load_step_from_steady_state(self) -> None:
         load_sys = load_rejection_system(5.0, 10.0)
         self.assertIsNotNone(load_sys)
@@ -96,6 +111,19 @@ class PITest(unittest.TestCase):
         self.assertEqual(len(evaluations), 6)
         self.assertEqual([fly.brightness[0] for fly in swarm], [5.0, 4.0, 3.0])
         np.testing.assert_array_equal(history[-1].position, evaluations[-1])
+
+    def test_search_stops_early_when_stagnant(self) -> None:
+        _, history = search(
+            lambda _: (-1.0, 0.0),
+            np.zeros(2),
+            np.ones(2),
+            population=5,
+            generations=50,
+            patience=3,
+            tolerance=1e-6,
+        )
+        # Initial best + 3 stagnant generations = 4 entries.
+        self.assertEqual(len(history), 4)
 
 
 if __name__ == "__main__":
