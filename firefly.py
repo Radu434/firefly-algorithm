@@ -32,7 +32,7 @@ def search(
 ) -> tuple[list[Firefly], list[Firefly]]:
     """Return the final swarm and the best firefly seen through each generation.
 
-    Alpha sets the initial random step width in normalized coordinates.
+    Alpha sets the fixed random step width in normalized coordinates.
     When patience is set, stop early after that many consecutive generations
     without a brightness improvement larger than tolerance.
     """
@@ -46,16 +46,18 @@ def search(
         for position in rng.random((population, dimensions))
     ]
     swarm.sort(key=lambda fly: fly.brightness, reverse=True)
-    history = [swarm[0]]
+    best = swarm[0]
+    history = [best]
     stagnant = 0
 
     for _ in range(generations):
         prev_best = history[-1].brightness
         for i in range(population):
             fly = swarm[i]
-            for j in range(i):
+            moved_toward_peer = False
+            for j in range(population):
                 other = swarm[j]
-                if other.brightness > fly.brightness:
+                if j != i and other.brightness > fly.brightness:
                     direction = other.position - fly.position
                     distance_squared = np.dot(direction, direction)
                     attractiveness = np.exp(-gamma * distance_squared)
@@ -64,17 +66,25 @@ def search(
                         fly.position + attractiveness * direction + random_step, 0.0, 1.0
                     )
                     fly = Firefly(position, objective(lower + span * position))
-                    swarm[i] = fly
+                    moved_toward_peer = True
+
+            if not moved_toward_peer:
+                random_step = alpha * (rng.random(dimensions) - 0.5)
+                position = np.clip(fly.position + random_step, 0.0, 1.0)
+                fly = Firefly(position, objective(lower + span * position))
+
+            swarm[i] = fly
+            # A new best has no brighter peer left to move toward this turn.
+            if fly.brightness > best.brightness:
+                best = fly
 
         swarm.sort(key=lambda fly: fly.brightness, reverse=True)
-        history.append(swarm[0])
-        alpha *= 0.93
+        history.append(best)
 
         if patience is not None:
-            best = swarm[0].brightness
             improved = any(
                 np.isfinite(cur) and (not np.isfinite(prev) or cur - prev > tolerance)
-                for cur, prev in zip(best, prev_best)
+                for cur, prev in zip(best.brightness, prev_best)
             )
             stagnant = 0 if improved else stagnant + 1
             if stagnant >= patience:

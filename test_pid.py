@@ -95,10 +95,10 @@ class PITest(unittest.TestCase):
         self.assertEqual(history[-1].brightness[0], -1.0)
         self.assertGreaterEqual(history[-1].brightness, history[0].brightness)
 
-    def test_search_updates_brightness_between_pairwise_moves(self) -> None:
-        # After moving toward the first firefly, the third passes it but can
-        # still move toward the second firefly because the second just improved.
-        scores = iter([3.0, 2.0, 1.0, 4.0, 3.5, 5.0])
+    def test_search_compares_all_peers_using_current_brightness(self) -> None:
+        # The second firefly dims after moving toward the first, then moves
+        # toward the third. The third later sees the second's improved score.
+        scores = iter([3.0, 2.0, 1.0, 3.0, 0.0, 5.0, 4.0, 6.0])
         evaluations = []
 
         def brightness(gains: np.ndarray) -> tuple[float, float]:
@@ -106,11 +106,36 @@ class PITest(unittest.TestCase):
             return next(scores), 0.0
 
         swarm, history = search(
-            brightness, np.zeros(2), np.ones(2), population=3, generations=1
+            brightness, np.zeros(2), np.ones(2),
+            population=3, generations=1, gamma=0.0, alpha=0.0,
         )
-        self.assertEqual(len(evaluations), 6)
-        self.assertEqual([fly.brightness[0] for fly in swarm], [5.0, 4.0, 3.0])
+        self.assertEqual(len(evaluations), 8)
+        np.testing.assert_allclose(
+            evaluations[3:], [evaluations[index] for index in (0, 0, 2, 0, 2)]
+        )
+        self.assertEqual([fly.brightness[0] for fly in swarm], [6.0, 5.0, 3.0])
         np.testing.assert_array_equal(history[-1].position, evaluations[-1])
+
+    def test_search_random_walk_uses_fixed_alpha_and_preserves_best(self) -> None:
+        scores = iter([4.0, 3.0, 2.0, 1.0])
+        alpha = 0.4
+        rng = np.random.default_rng(1)
+        initial_position = rng.random(1)
+        expected_position = initial_position
+        for _ in range(3):
+            expected_position = np.clip(
+                expected_position + alpha * (rng.random(1) - 0.5), 0.0, 1.0
+            )
+
+        swarm, history = search(
+            lambda _: (next(scores), 0.0), np.zeros(1), np.ones(1),
+            population=1, generations=3, alpha=alpha,
+        )
+
+        np.testing.assert_allclose(swarm[0].position, expected_position)
+        self.assertEqual(swarm[0].brightness, (1.0, 0.0))
+        self.assertEqual([fly.brightness for fly in history], [(4.0, 0.0)] * 4)
+        np.testing.assert_array_equal(history[-1].position, initial_position)
 
     def test_search_stops_early_when_stagnant(self) -> None:
         _, history = search(

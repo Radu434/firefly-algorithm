@@ -22,10 +22,10 @@ UPPER = np.array([50.0, 50.0])
 population = 30
 generations = 100
 gamma = 1.0
-alpha = 0.005
+alpha = 0.001
 patience = 15
-tolerance = 1e-6
-seed = 1
+tolerance = 1e-7
+seed = 42
 
 
 def plot_results(
@@ -87,7 +87,7 @@ def main() -> None:
     parser.add_argument("--no-plot", action="store_true", help="Run without opening a plot.")
     parser.add_argument(
         "--alpha", type=float, default=alpha,
-        help="Initial random step width in normalized coordinates (default: %(default)s).",
+        help="Fixed random step width in normalized coordinates (default: %(default)s).",
     )
     args = parser.parse_args()
     if not np.isfinite(args.alpha) or args.alpha < 0.0:
